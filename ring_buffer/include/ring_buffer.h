@@ -14,34 +14,38 @@ namespace hft
         static constexpr std::size_t CacheLineSize = std::hardware_destructive_interference_size;
 
     public:
-        auto Push(const T item) noexcept
+        [[nodiscard]]
+        bool Push(const T item) noexcept
         {
-            const auto write_index = m_producer_index.load();
+            const auto write_index = m_producer_index.load(std::memory_order_relaxed);
             const auto next_write = (write_index + 1) & (Size - 1);
-            const auto read_index = m_consumer_index.load();
+            const auto read_index = m_consumer_index.load(std::memory_order_acquire);
+            
             if (next_write == read_index)
             {
                 return false;
             }
             
             m_data[write_index] = item;
-            m_producer_index.store(next_write);
+            m_producer_index.store(next_write, std::memory_order_release);
             return true;
         }
 
-        [[nodiscard]] auto Pop(T& buffer) noexcept
+        [[nodiscard]] 
+        bool Pop(T& buffer) noexcept
         {
-            const auto read_index = m_consumer_index.load();
-            const auto next_read = (read_index + 1) & (Size - 1);
-            const auto write_index = m_producer_index.load();
-            if (next_read == write_index)
+            const auto read_index = m_consumer_index.load(std::memory_order_relaxed);
+            const auto write_index = m_producer_index.load(std::memory_order_acquire);
+            
+            if (read_index == write_index)
             {
                 return false;
             }
 
             buffer = m_data[read_index];
-            m_consumer_index.store(next_read);
-            return true;
+            const auto next_read = (read_index + 1) & (Size - 1);
+            m_consumer_index.store(next_read, std::memory_order_release);
+            return true;    
         }
 
         auto Peek(uint64_t index) noexcept
@@ -49,12 +53,12 @@ namespace hft
             return m_data[index];
         }
 
+        // TODO(vss): add emplace(), empty(), capacity(), size()
     private:
         std::array<T, Size> m_data;
         alignas(CacheLineSize) std::atomic<uint64_t> m_producer_index{ 0 };
         alignas(CacheLineSize) std::atomic<uint64_t> m_consumer_index{ 0 };
     };
-
 } // namespace hft
 #define RING_BUFFER_H
 #endif
