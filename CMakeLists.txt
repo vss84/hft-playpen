@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # MSVC flags
 if(MSVC)
-    add_compile_options(/W3 /permissive-)
+    add_compile_options(/permissive- /W3)
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_compile_options(/Od /Zi /MDd)
         add_link_options(/DEBUG)
@@ -45,3 +45,4 @@ enable_testing()
 
 # Components
 add_subdirectory(ring_buffer)
+add_subdirectory(slab_alloc)
