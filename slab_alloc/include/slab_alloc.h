@@ -61,7 +61,7 @@ namespace hft
                 Cache *cache = entry.second.get();
                 if (!cache) continue;
 
-                auto free_list = [] (Slab *head)
+                auto free_list = [](Slab *head)
                     {
                         Slab *slab = head;
                         while (slab)

@@ -48,12 +48,18 @@ namespace hft
             return true;    
         }
 
-        auto Peek(uint64_t index) noexcept
+        auto Peek(const uint64_t index) const noexcept
         {
             return m_data[index];
         }
 
-        // TODO(vss): add emplace(), empty(), capacity(), size()
+        bool Empty() const noexcept
+        {
+            return m_consumer_index.load(std::memory_order_acquire) ==
+                m_producer_index.load(std::memory_order_acquire);
+        }
+
+        // TODO(vss): add emplace(), capacity(), size()
     private:
         std::array<T, Size> m_data;
         alignas(CacheLineSize) std::atomic<uint64_t> m_producer_index{ 0 };

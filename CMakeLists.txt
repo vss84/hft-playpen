@@ -46,3 +46,4 @@ enable_testing()
 # Components
 add_subdirectory(ring_buffer)
 add_subdirectory(slab_alloc)
+add_subdirectory(logger)
