@@ -1,0 +1,11 @@
+add_library(matching_engine INTERFACE)
+target_include_directories(matching_engine INTERFACE include)
+
+target_link_libraries(matching_engine INTERFACE 
+	common
+	orderbook
+)
+
+add_executable(matching_engine_test tests/test_matching_engine.cpp)
+target_link_libraries(matching_engine_test PRIVATE matching_engine gtest_main)
+add_test(NAME matching_engine_test COMMAND matching_engine_test)

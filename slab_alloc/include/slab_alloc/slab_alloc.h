@@ -1,4 +1,5 @@
-#if !defined(SLAB_ALLOC_H)
+#ifndef SLAB_ALLOC_H
+#define SLAB_ALLOC_H
 
 #include <unordered_map>
 #include <memory>
@@ -323,6 +324,7 @@ namespace hft
         }
 
     };
+
 } // namespace hft
-#define SLAB_ALLOC_H
+
 #endif

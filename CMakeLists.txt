@@ -1,3 +1,4 @@
+# project root cmakelist c:/hft-playpen/
 cmake_minimum_required(VERSION 3.25)
 
 project(hft_playpen 
@@ -44,6 +45,13 @@ FetchContent_MakeAvailable(benchmark)
 enable_testing()
 
 # Components
+add_subdirectory(common)
+add_subdirectory(protocol)
 add_subdirectory(ring_buffer)
 add_subdirectory(slab_alloc)
 add_subdirectory(logger)
+add_subdirectory(order_parser)
+add_subdirectory(orderbook)
+add_subdirectory(matching_engine)
+add_subdirectory(order_generator)
+add_subdirectory(trading_pipeline)

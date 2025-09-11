@@ -1,4 +1,5 @@
-#if !defined(RING_BUFFER_H)
+#ifndef RING_BUFFER_H
+#define RING_BUFFER_H
 
 #include <new>
 #include <atomic>
@@ -65,6 +66,7 @@ namespace hft
         alignas(CacheLineSize) std::atomic<uint64_t> m_producer_index{ 0 };
         alignas(CacheLineSize) std::atomic<uint64_t> m_consumer_index{ 0 };
     };
+
 } // namespace hft
-#define RING_BUFFER_H
+
 #endif

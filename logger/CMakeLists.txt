@@ -1,5 +1,8 @@
 add_library(logger INTERFACE)
 target_include_directories(logger INTERFACE include)
+target_link_libraries(logger INTERFACE
+	ring_buffer
+)
 
 # Tests
 add_executable(logger_test tests/logger_test.cpp)

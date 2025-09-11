@@ -15,7 +15,7 @@
 #include <windows.h>
 #undef ERROR
 
-#include "../../ring_buffer/include/ring_buffer.h"
+#include "ring_buffer/ring_buffer.h"
 
 namespace hft
 {
@@ -61,6 +61,10 @@ namespace hft
             if (m_out.is_open()) m_out.flush();
         }
 
+        // TODO(vss): This logger uses SPSC ring buffer 
+        // but Log() can be called from multiple threads.
+        // This creates a race condition and UB. Need to:
+        // Replace SPSCRingBuffer with MPSCRingBuffer implementation
         bool Log(LogLevel level, const std::string &message)
         {
             LogEntry entry;

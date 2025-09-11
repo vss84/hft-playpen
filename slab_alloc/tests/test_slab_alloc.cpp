@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "slab_alloc.h"
+#include "slab_alloc/slab_alloc.h"
 
 using namespace hft;
 
