@@ -115,7 +115,6 @@ namespace hft
                 order.price += m_tick_size * (1 + (m_rng() % 5));
             }
 
-            // Time in force
             int tif_choice = m_tif_dist(m_rng);
             order.tif = (tif_choice == 0) ? TimeInForce::GTC : 
                         (tif_choice == 1) ? TimeInForce::IOC : TimeInForce::FOK;
