@@ -44,8 +44,7 @@ namespace hft
             , m_mid_price(initial_mid_price)
             , m_tick_size(tick_size)
             , m_symbol_id(symbol_id)
-        {
-        }
+        { }
 
         OrderRequest GenerateNext()
         {

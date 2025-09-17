@@ -141,7 +141,7 @@ namespace hft
                     buffer = protocol::BinaryCodec::Encode(msg);
                 }
 
-                while (!m_agent_to_parser.Push(buffer))
+                while (!m_agent_to_parser.TryPush(buffer))
                 {
                     if (!m_running.load())
                         return;
@@ -165,11 +165,11 @@ namespace hft
 
             while (m_running.load())
             {
-                if (m_agent_to_parser.Pop(buffer))
+                if (m_agent_to_parser.TryPop())
                 {
                     OrderRequest request = m_parser.ParseMessage(buffer);
 
-                    while (!m_parser_to_engine.Push(request))
+                    while (!m_parser_to_engine.TryPush(request))
                     {
                         if (!m_running.load())
                             return;
@@ -195,7 +195,7 @@ namespace hft
 
             while (m_running.load())
             {
-                if (m_parser_to_engine.Pop(request))
+                if (m_parser_to_engine.TryPop())
                 {
                     m_engine.ProcessOrderRequest(request);
 
@@ -203,7 +203,7 @@ namespace hft
 
                     for (const auto &trade : trades)
                     {
-                        while (!m_engine_to_logger.Push(trade))
+                        while (!m_engine_to_logger.TryPush(trade))
                         {
                             if (!m_running.load())
                                 return;
@@ -231,7 +231,7 @@ namespace hft
 
             while (m_running.load())
             {
-                if (m_engine_to_logger.Pop(trade))
+                if (m_engine_to_logger.TryPop())
                 {
                     std::string trade_msg = std::format("{},{},{},{},{}",
                                                         trade.timestamp_ns,

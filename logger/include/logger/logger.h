@@ -81,7 +81,7 @@ namespace hft
 
             if (m_policy == OverflowPolicy::Drop)
             {
-                if (!m_buffer.Push(entry))
+                if (!m_buffer.TryPush(entry))
                 {
                     m_dropped.fetch_add(1, std::memory_order_relaxed);
                     return false;
@@ -96,7 +96,7 @@ namespace hft
                 // TODO(vss): Switch temporary implementation to a complete blocking policy.
                 for (;;)
                 {
-                    if (m_buffer.Push(entry))
+                    if (m_buffer.TryPush(entry))
                     {
                         m_enqueued.fetch_add(1);
                         return true;
@@ -150,7 +150,7 @@ namespace hft
                 batch.clear();
                 LogEntry tmp;
                 
-                for (size_t i = 0; i < BATCH_SIZE && m_buffer.Pop(tmp); ++i)
+                for (size_t i = 0; i < BATCH_SIZE && m_buffer.TryPop(); ++i)
                 {
                     batch.push_back(tmp);
                 }
