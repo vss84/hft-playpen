@@ -56,6 +56,11 @@ namespace hft
             Stop();
         }
 
+        TradingPipeline(const TradingPipeline &) = delete;
+        TradingPipeline &operator=(const TradingPipeline &) = delete;
+        TradingPipeline(TradingPipeline &&) = delete;
+        TradingPipeline &operator=(TradingPipeline &&) = delete;
+
         void Start()
         {
             if (m_running.exchange(true))
@@ -78,17 +83,16 @@ namespace hft
 
             std::cout << "Stopping trading pipeline...\n";
 
-            if (m_agent_thread.joinable())
-                m_agent_thread.join();
-            if (m_parser_thread.joinable())
-                m_parser_thread.join();
-            if (m_engine_thread.joinable())
-                m_engine_thread.join();
-            if (m_logger_thread.joinable())
-                m_logger_thread.join();
+            if (m_agent_thread.joinable()) { m_agent_thread.join(); }
+            
+            if (m_parser_thread.joinable()) { m_parser_thread.join(); }
+            
+            if (m_engine_thread.joinable()) { m_engine_thread.join(); }
+            
+            if (m_logger_thread.joinable()) { m_logger_thread.join(); }
 
             m_logger.Flush();
-
+        
             PrintStats();
         }
 
@@ -99,6 +103,10 @@ namespace hft
             std::cout << "Orders Parsed: " << m_orders_parsed.load() << "\n";
             std::cout << "Orders Matched: " << m_orders_matched.load() << "\n";
             std::cout << "Trades Logged: " << m_trades_logged.load() << "\n";
+            std::cout << "\n=== Buffer Status ===\n";
+            std::cout << "Agent->Parser: " << m_agent_to_parser.Size() << "\n";
+            std::cout << "Parser->Engine: " << m_parser_to_engine.Size() << "\n";
+            std::cout << "Engine->Logger: " << m_engine_to_logger.Size() << "\n";
             std::cout << "========================\n";
         }
 
@@ -161,13 +169,14 @@ namespace hft
         {
             std::cout << "Parser thread started\n";
 
-            std::vector<uint8_t> buffer;
 
             while (m_running.load())
             {
-                if (m_agent_to_parser.TryPop())
+                auto buffer = m_agent_to_parser.Peek();
+                if (buffer)
                 {
-                    OrderRequest request = m_parser.ParseMessage(buffer);
+                    OrderRequest request = m_parser.ParseMessage(*buffer);
+                    m_agent_to_parser.TryPop();
 
                     while (!m_parser_to_engine.TryPush(request))
                     {
@@ -191,13 +200,14 @@ namespace hft
         {
             std::cout << "Engine thread started\n";
 
-            OrderRequest request;
 
             while (m_running.load())
             {
-                if (m_parser_to_engine.TryPop())
+                auto request = m_parser_to_engine.Peek();
+                if (request)
                 {
-                    m_engine.ProcessOrderRequest(request);
+                    m_engine.ProcessOrderRequest(*request);
+                    m_parser_to_engine.TryPop();
 
                     auto trades = m_engine.GetAndClearTrades();
 
@@ -226,20 +236,21 @@ namespace hft
         {
             std::cout << "Logger thread started\n";
 
-            TradeEvent trade;
             size_t batch_count = 0;
 
             while (m_running.load())
             {
-                if (m_engine_to_logger.TryPop())
+                auto trade = m_engine_to_logger.Peek();
+                if (trade)
                 {
                     std::string trade_msg = std::format("{},{},{},{},{}",
-                                                        trade.timestamp_ns,
-                                                        trade.maker_order_id,
-                                                        trade.taker_order_id,
-                                                        trade.price,
-                                                        trade.quantity);
+                                                        trade->timestamp_ns,
+                                                        trade->maker_order_id,
+                                                        trade->taker_order_id,
+                                                        trade->price,
+                                                        trade->quantity);
                     
+                    m_engine_to_logger.TryPop();
                     m_logger.Log(LogLevel::INFO, trade_msg);
 
                     m_trades_logged.fetch_add(1);

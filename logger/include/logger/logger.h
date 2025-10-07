@@ -1,21 +1,23 @@
-#if !defined(LOGGER_H)
+#ifndef LOGGER_H
+#define LOGGER_H
 
 #include <string>
 #include <cstring>
 #include <fstream>
 #include <thread>
 #include <algorithm>
-#include <vector>
 #include <stdexcept>
+#include <array>
 
 #ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_WIN_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
 #endif
 #define NOMINMAX
 #include <windows.h>
 #undef ERROR
 
 #include "ring_buffer/ring_buffer.h"
+#include <mutex>
 
 namespace hft
 {
@@ -67,6 +69,11 @@ namespace hft
         // Replace SPSCRingBuffer with MPSCRingBuffer implementation
         bool Log(LogLevel level, const std::string &message)
         {
+            static std::mutex log_mutex;  // Sloppy fix until mpsc
+            std::lock_guard<std::mutex> lock(log_mutex);
+
+            if (!m_running) return false;
+
             LogEntry entry;
             entry.timestamp_ns = Now();
             entry.level = level;
@@ -142,27 +149,31 @@ namespace hft
         {
             constexpr size_t BATCH_SIZE = 256;
             constexpr auto IDLE_SLEEP = std::chrono::microseconds(50);
-            std::vector<LogEntry> batch;
-            batch.reserve(BATCH_SIZE);
+            std::array<LogEntry, BATCH_SIZE> batch;
 
             while (m_running.load(std::memory_order_acquire) || !m_buffer.Empty())
             {
-                batch.clear();
-                LogEntry tmp;
+                size_t count = 0;
                 
-                for (size_t i = 0; i < BATCH_SIZE && m_buffer.TryPop(); ++i)
+                for (size_t i = 0; i < BATCH_SIZE; ++i)
                 {
-                    batch.push_back(tmp);
+                    auto ptr = m_buffer.Peek();
+                    if (!ptr) { break; }
+                    
+                    batch[i] = *ptr;
+                    m_buffer.TryPop();
+                    ++count;
                 }
 
-                if (batch.empty())
+                if (count == 0)
                 {
                     std::this_thread::sleep_for(IDLE_SLEEP);
                     continue;
                 }
 
-                for (auto &log : batch)
+                for (size_t i = 0; i < count; ++i)
                 {
+                    auto &log = batch[i];
                     const char *lvl = (log.level == LogLevel::DEBUG) ? "DEBUG" :
                                       (log.level == LogLevel::INFO) ? "INFO" :
                                       (log.level == LogLevel::WARNING) ? "WARNING" : "ERROR";
@@ -181,5 +192,4 @@ namespace hft
 
     };
 } // namespace hft
-#define LOGGER_H
 #endif

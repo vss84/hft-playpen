@@ -1,3 +1,43 @@
+ /* This is a very bad attempt at a slab allocator!
+  * and currently not being used throughout the rest of the pipeline. 
+  * Needs a full rewrite, better sizing logic, metadata layout, lifecycle
+  * handling, real policy and per-cache behavior.
+  * Cache sizing needs to consider calculating object size, alignment, order,
+  * and the number of objects per slab for every cache. 
+  * Pick the smallest amount of pages that fits at least min num of objs(1?)
+  * Real slub uses an order calculation path that tries to fit a number of
+  * objects per slab and adjusts alignment and offset as needed. something similar
+  * should exist here, compute pages_needed, slab_bytes, usable space after metadata,
+  * and objects_per_slab. min_partial and max_partial should also depend
+  * on object size, like slub's ilog2(size)/2 heuristic, to balance memory usage and
+  * freq allocations. Alignment should be handled correctly, both for the slab and each object.
+  * Proper alignment, something like aligning objects to alignof(T) or std::max_align_t
+  * offset might be needed if metadata ends @ middle. Smaller objects shouldn;t be cache(line) aligned unless requested.
+  * Metadata separation is missing. The slab header should be a fixed offset that allows recovery from any obj ptr. 
+  * Use power of two sizes? Easy to mask the ptr and get the base.
+  * Allocations should pop from the slab freelist. If the slab is empty, refill from the partial list.
+  * If no partial slabs remain, allocate a new slab. Free pushes objects back to the freelist. 
+  * When a slab transitions from full to partial, move it between the lists. Fully empty slabs should be reclaimed. 
+  * Enforce min_partial and max_partial per cache, freeing or caching slabs beyond that range.
+  * Allocations should consider the 64kb Windows reservation granularity.
+  * Slabs smaller than that should still be reserved from a larger aligned region.
+  * Use MEM_RESERVE for virtual address space, commit pages (MEM_COMMIT) lazily as slabs are populated.
+  * Reserving aligned blocks per cache is cheap and gives predictable slab alignment.
+  * Should also track which slabs are committed and which are still reserved, to reclaim memory later.
+  * Thread-local caches should replace the global path for most allocations.
+  * Each thread(pinned to a diff core) keeps its own cache storage, pseudo per-cpu like linux.
+  * Thread-local storage would hold the active slab and a small local list of partials.
+  * Allocations hit the local freelist directly, if empty, it refills from the global
+  * cache partial list. When the local cache gets too many empty slabs, it should flush
+  * them back. this should give better locality in the lockless path.
+  * Add destruction and merging. When a cache is destroyed,
+  * all its slabs should be walked and freed, and empty slabs merged or released back
+  * to the OS. Merging identical caches (same size/alignment) would also be useful to reduce duplication.
+  * Add cache aliasing so small objects from different caches wont fight for the same cache lines.
+  * Slub uses color offsetting to reduce that. A lightweight slab stats struct could track allocation counts,
+  * frees, and transitions between full/partial/empty
+  */
+
 #ifndef SLAB_ALLOC_H
 #define SLAB_ALLOC_H
 
@@ -23,6 +63,7 @@ namespace hft
     class SlabAlloc
     {
         struct Cache;
+
         struct Slab
         {
             Slab *next;
@@ -32,7 +73,7 @@ namespace hft
             size_t free_slots;
             void *free_list;
         };
-    
+
         struct Cache
         {
             Cache(size_t obj_size, size_t slab_size)
@@ -40,14 +81,15 @@ namespace hft
                 , slab_size(slab_size)
                 , partial(nullptr)
                 , full(nullptr)
-            {}
+            {
+            }
 
             size_t obj_size;
             size_t slab_size;
             Slab *partial;
             Slab *full;
         };
-        
+
     public:
 
         SlabAlloc()
@@ -90,7 +132,7 @@ namespace hft
         size_t DebugSlotsPerSlab(size_t obj_size) const noexcept
         {
             auto aligned = DebugAlignedSize(obj_size);
-            auto* cache = FindCache(aligned);
+            auto *cache = FindCache(aligned);
             if (!cache)
             {
                 size_t header_size = AlignUp(sizeof(Slab), sizeof(void *));
@@ -105,27 +147,27 @@ namespace hft
         Slab *DebugSlabHeaderFromPtr(void *p) noexcept
         {
             if (!p) return nullptr;
-            
+
             uintptr_t x = reinterpret_cast<uintptr_t>(p);
             uintptr_t base = x & ~(static_cast<uintptr_t>(m_default_slab_size) - 1);
-            
+
             if (base % m_default_slab_size != 0) return nullptr;
 
             Slab *slab = reinterpret_cast<Slab *>(base);
 
             if (!slab) return nullptr;
             if (!slab->owner) return nullptr;
-            
+
             return slab;
         }
 
         size_t DebugSlabsInCache(size_t obj_size) noexcept
         {
             auto aligned = DebugAlignedSize(obj_size);
-            auto* cache = FindCache(aligned);
+            auto *cache = FindCache(aligned);
             if (!cache) return 0;
 
-            auto count_list = [] (const Slab *head) -> size_t 
+            auto count_list = [](const Slab *head) -> size_t
                 {
                     size_t n = 0;
                     const Slab *cur = head;
@@ -180,8 +222,8 @@ namespace hft
             }
 
             return obj;
-        }   
-        
+        }
+
         void Deallocate(void *p)
         {
             if (!p)
@@ -193,11 +235,11 @@ namespace hft
             uintptr_t x = reinterpret_cast<uintptr_t>(p);
             uintptr_t base = x & ~(slab_size - 1);
             Slab *slab = reinterpret_cast<Slab *>(base);
-            
+
             assert(slab->owner != nullptr);
             Cache *cache = slab->owner;
             bool was_full = (slab->free_slots == 0);
-            
+
             PushToSlab(slab, p);
 
             if (was_full)
@@ -234,11 +276,11 @@ namespace hft
         {
             size_t slab_size = cache->slab_size;
             void *memory = VirtualAlloc(nullptr, slab_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-            if (!memory) 
-            { 
+            if (!memory)
+            {
                 return nullptr;
             }
-            
+
             Slab *slab = reinterpret_cast<Slab *>(memory);
             slab->prev = nullptr;
             slab->next = nullptr;
@@ -273,7 +315,7 @@ namespace hft
         {
             slab->next = *head;
             slab->prev = nullptr;
-            
+
             if (*head)
             {
                 (*head)->prev = slab;
@@ -281,22 +323,22 @@ namespace hft
 
             *head = slab;
         }
-        
+
         static inline void RemoveSlabFromList(Slab **head, Slab *slab)
         {
-            if (slab->prev) 
-            { 
-                slab->prev->next = slab->next; 
-            }
-
-            if (slab->next) 
-            { 
-                slab->next->prev = slab->prev; 
-            }
-
-            if (slab == *head) 
+            if (slab->prev)
             {
-                *head = slab->next; 
+                slab->prev->next = slab->next;
+            }
+
+            if (slab->next)
+            {
+                slab->next->prev = slab->prev;
+            }
+
+            if (slab == *head)
+            {
+                *head = slab->next;
             }
 
             slab->next = nullptr;

@@ -26,6 +26,7 @@ namespace hft
     template <typename T>
     concept no_throw_destructible = std::is_nothrow_destructible_v<T>;
 
+    
     template <typename T, size_t Capacity, typename Allocator = std::allocator<T>> 
         requires power_of_two<Capacity> 
     class SPSCRingBuffer
@@ -145,7 +146,7 @@ namespace hft
                    m_consumer_index.load(std::memory_order_acquire);
         }
 
-        [[nodiscard]] constexpr size_t GetCapacity() const noexcept { return Capacity; }
+        [[nodiscard]] constexpr size_t GetCapacity() const noexcept { return Capacity - 1; }
 
     private:
         T* m_data;

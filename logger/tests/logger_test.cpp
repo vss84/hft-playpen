@@ -30,7 +30,7 @@ static std::string ExtractPayload(const std::string &line)
             space_count++;
             if (space_count == 3)
             {
-                pos = i + 1;
+                pos = i + 1;    
                 break;
             }
         }
